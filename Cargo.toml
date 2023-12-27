@@ -2,5 +2,12 @@
 name = "todo"
 version = "0.1.0"
 edition = "2021"
+authors = ["Diogo Cavaleiro"]
+description = "Simple TODO list, no external crates included"
+license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "todo"
+path = "src/lib.rs"
