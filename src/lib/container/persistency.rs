@@ -1,6 +1,5 @@
-use core::str;
+use std::fmt;
 use std::fs::File;
-use std::io::{ErrorKind};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use crate::error::Result;
@@ -21,25 +20,25 @@ impl Storage {
     pub fn new() -> Result<Self>
     {
         // if debug, else nominal -- but this I don't like this thing.
-        let path: PathBuf = if cfg!(debug_assertions) {
-            std::path::PathBuf::from(".todo_storage")
+        let path = if cfg!(debug_assertions) {
+            PathBuf::from(".todo_storage")
         } else {
             let home = std::env::var("HOME")
-                .or(Err("HOME is not set, cannot find default storage file"))?;
-            std::path::PathBuf::from(home).join(".todo_storage")
+                .or(Err("HOME is not set, cannot find default storage file!"))?;
+            PathBuf::from(home).join(".todo_storage")
         };
 
-        let file = std::fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .open(&path).or_else(|e| {
-            if matches!(e.kind(), ErrorKind::AlreadyExists) {
-                Err(format!("Cannot create new {:?}, it already exist!", path.file_name().unwrap()))
-            } else {
-                Err(e.to_string())
-            }
-        })?;
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+
+        let file = match path.exists() {
+            true => options.append(true),
+            false => options.write(true).create_new(true)
+        }.open(&path)?;
+
+        if path.exists() {
+            return Ok(Self { file });
+        }
 
         const SC_BYTES: &[u8; Storage::SC_SIZE] = b"_This_Is_An_Epic_Sanity_Check_V1"; // checked at compile time, nice!
         file.write_all_at(SC_BYTES, Storage::SC_OFFSET as u64)?;
@@ -56,18 +55,31 @@ impl Storage {
     pub fn from_path(p: &Path) -> Result<Self> {
         let file = std::fs::OpenOptions::new()
             .read(true)
-            .write(true)
+            .append(true)
             .open(&p)?;
         Ok(Self { file })
     }
+}
 
-    pub fn print(&self) {
+// custom impl of fmt::Debug
+impl fmt::Debug for Storage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut buff = [0u8; Storage::METADATA_RESERVED_SIZE];
         self.file.read_at(&mut buff, 0).unwrap();
 
-        // Slices are cool!
-        println!("Sanity Check: {:?}", str::from_utf8(&buff[Storage::SC_OFFSET..Storage::SC_SIZE]).unwrap());
-        println!("Look Up Table: {:?}", str::from_utf8(&buff[Storage::LUT_OFFSET..Storage::LUT_SIZE]).unwrap());
-        println!("Reserved Later Use: {:?}", str::from_utf8(&buff[Storage::RESERVED_LATER_USE_OFFSET..Storage::METADATA_RESERVED_SIZE]).unwrap());
+        let sanitize = |slice: &[u8]| -> String {
+            slice.iter()
+                .map(|&c| if c == 0 { '.' } else { c as char })
+                .collect()
+        };
+
+        write!(f, "Storage [
+    Sanity Check: {},
+    Look Up Table: {},
+    Reserved for Later Use: {},
+]",
+               sanitize(&buff[Storage::SC_OFFSET..Storage::SC_SIZE]),
+               sanitize(&buff[Storage::LUT_OFFSET..Storage::LUT_SIZE]),
+               sanitize(&buff[Storage::RESERVED_LATER_USE_OFFSET..Storage::METADATA_RESERVED_SIZE]))
     }
 }

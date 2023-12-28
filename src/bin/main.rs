@@ -5,10 +5,22 @@ use todo::error::Result;
 
 pub const fn help_message() -> &'static str {
     "
-Usage: todo --<option> <argument> [...]
-
+Usage: todo <option> [<argument>] ...
     Options:
-        --add               <name> <content>
+        {-a|--add} <name> <content>
+            Add a new entry
+
+        {-d|--delete} <id>
+            Delete an entry
+
+        {-f|--find} <name>
+            Find an entry by name
+
+        --find-id <id>
+            Find and entry by id
+
+        --help
+            Display this message
 "
 }
 
@@ -50,6 +62,7 @@ pub fn option_handler(opt: Options, container: &mut impl IContainer<Item=Entry>)
 // to offer regarding syntax and std library features (no crates included).
 fn main() -> Result<()>
 {
+    // TODO: Split in 2 types of options: pre-execution and execution
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 1 {
         print!("{}", help_message());
@@ -60,30 +73,31 @@ fn main() -> Result<()>
     let mut next_id = 0_u32;
     // let mut storage = Storage::new()?;
     let mut storage = Storage::from_path(Path::new(".todo_storage"))?;
+
     let mut it = args.iter().skip(1);
     while let Some(arg) = it.next() {
         let opt: Options = match arg.as_str() {
             "--help" => Options::Help,
             "--add" | "-a" => {
-                let name = it.next().expect("NAME expected");
-                let content = it.next().expect("CONTENT expected");
+                let name = it.next().ok_or("<name> expected: todo {-a|--add} <name> <content>")?;
+                let content = it.next().ok_or("<content> expected: todo {-a|--add} <name> <content>")?;
                 next_id += 1;
                 Options::Add(Entry { id: next_id, name: name.clone(), content: content.clone() })
             }
             "--delete" | "-d" => {
-                let id = it.next().expect("ID expected");
+                let id = it.next().ok_or("<id> expected: todo {-d|--delete} <id>")?;
                 let id: u32 = id.trim().parse()
-                    .unwrap_or_else(|_| panic!("Error: {} is not a valid ID", id));
+                    .or_else(|_| Err(format!("'{}' is not a valid <id>", id)))?; // this way format! is not expanded if not used
                 Options::Delete(id)
             }
             "--find" | "-f" => {
-                let name = it.next().expect("NAME expected");
+                let name = it.next().ok_or("<name> expected: todo {-f|--find} <name>")?;
                 Options::Find(name)
             }
             "--find-id" => {
-                let id = it.next().expect("ID expected");
+                let id = it.next().expect("<id> expected: todo --find-id <id>");
                 let id: u32 = id.trim().parse()
-                    .unwrap_or_else(|_| panic!("Error: {} is not a valid ID", id));
+                    .or_else(|_| Err(format!("'{}' is not a valid <id>", id)))?;
                 Options::FindId(id)
             }
             _ => Options::Unknown(arg)
@@ -91,6 +105,6 @@ fn main() -> Result<()>
         option_handler(opt, &mut container)?;
     }
     println!("Container content: {:?}", container);
-    storage.print();
+    println!("{:?}", storage);
     Ok(())
 }
