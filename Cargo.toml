@@ -10,4 +10,8 @@ license = "MIT OR Apache-2.0"
 
 [lib]
 name = "todo"
-path = "src/lib.rs"
+path = "src/lib/lib.rs"
+
+[[bin]]
+name = "todo"
+path = "src/bin/main.rs"
